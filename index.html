@@ -495,140 +495,584 @@ let ndDone      = false;
 let ndHistory   = [];   // snapshot of frontier at each step
 let ndCursor    = -1;
 
-// ─────────────────────────────────────────────
-// PARSER
-// ─────────────────────────────────────────────
-function parseProgram(text) {
-  const result = {};
-  const errors = [];
+    function levenshtein(a, b) {
+      a = a.toLowerCase();
+      b = b.toLowerCase();
 
-  const lines = text
-    .split('\n')
-    .map(l => l.trim())
-    .filter(Boolean);
-
-  for (const line of lines) {
-
-    // =========================
-    // 1. Validar estructura base
-    // =========================
-    const base = line.match(/^(\d+)\]\s*(\w+)(.*)$/i);
-
-    if (!base) {
-      errors.push(`Formato inválido: "${line}"`);
-      continue;
-    }
-
-    const [, idText, action, rest] = base;
-
-    const id = parseInt(idText);
-
-    // =========================
-    // 2. Validar acción
-    // =========================
-    const validActions = ["scan", "write", "read"];
-
-    if (!validActions.includes(action.toLowerCase())) {
-      errors.push(
-        `Acción inválida "${action}" en línea: "${line}"`
+      const dp = Array.from({ length: a.length + 1 }, () =>
+        new Array(b.length + 1).fill(0)
       );
-      continue;
-    }
 
-    const type = action.toLowerCase();
+      for (let i = 0; i <= a.length; i++) dp[i][0] = i;
+      for (let j = 0; j <= b.length; j++) dp[0][j] = j;
 
-    // =========================
-    // 3. Estado duplicado
-    // =========================
-    if (result[id]) {
-      errors.push(
-        `Estado ${id} definido más de una vez`
-      );
-      continue;
-    }
-
-    // =========================
-    // 4. Validar parámetros
-    // =========================
-    if (!rest.trim()) {
-      errors.push(
-        `Estado ${id}: faltan transiciones`
-      );
-      continue;
-    }
-
-    const transitions = [];
-
-    // Busca cosas como:
-    // (a,1)
-    // (b,2)
-    const re = /\(\s*([^,)\s]+)\s*,\s*(\d+)\s*\)/g;
-
-    let tm;
-
-    while ((tm = re.exec(rest)) !== null) {
-
-      const symbol = tm[1].trim();
-      const nextState = parseInt(tm[2]);
-
-      // Validar símbolo
-      if (!symbol) {
-        errors.push(
-          `Estado ${id}: símbolo vacío`
-        );
-        continue;
+      for (let i = 1; i <= a.length; i++) {
+        for (let j = 1; j <= b.length; j++) {
+          const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+          dp[i][j] = Math.min(
+            dp[i - 1][j] + 1,
+            dp[i][j - 1] + 1,
+            dp[i - 1][j - 1] + cost
+          );
+        }
       }
 
-      // Validar destino
-      if (isNaN(nextState)) {
-        errors.push(
-          `Estado ${id}: destino inválido`
-        );
-        continue;
+      return dp[a.length][b.length];
+    }
+
+    function suggestClosest(word, options) {
+      let best = null;
+      let bestDist = Infinity;
+
+      for (const opt of options) {
+        const d = levenshtein(word, opt);
+        if (d < bestDist) {
+          bestDist = d;
+          best = opt;
+        }
       }
 
-      transitions.push({
-        symbol,
-        nextState
-      });
+      return bestDist <= 2 ? best : null;
     }
 
-    // =========================
-    // 5. Validar si hubo matches
-    // =========================
-    if (!transitions.length) {
-      errors.push(
-        `Estado ${id}: transiciones inválidas`
+    function formatError(lineNumber, column, lineText, message, suggestion = "") {
+      const safeColumn = Math.max(1, column);
+      const pointer = " ".repeat(Math.max(0, safeColumn - 1)) + "^";
+
+      return [
+        `Error en línea ${lineNumber}, columna ${safeColumn}`,
+        "",
+        lineText,
+        pointer,
+        "",
+        suggestion ? `${message} ${suggestion}` : message
+      ].join("\n");
+    }
+
+    function parseTransitions(rest, line, lineNumber, baseColumn) {
+      const transitions = [];
+      let i = 0;
+
+      const skipSpaces = () => {
+        while (i < rest.length && /\s/.test(rest[i])) i++;
+      };
+
+      skipSpaces();
+
+      while (i < rest.length) {
+        const start = i;
+
+        if (rest[i] !== "(") {
+          return {
+            ok: false,
+            error: formatError(
+              lineNumber,
+              baseColumn + i,
+              line,
+              "Se esperaba '(' para iniciar una transición.",
+              "Ejemplo válido: (a,1)"
+            )
+          };
+        }
+
+        i++;
+        skipSpaces();
+
+        const symbolStart = i;
+        while (i < rest.length && !/[\s,)]/.test(rest[i])) i++;
+        const symbol = rest.slice(symbolStart, i).trim();
+
+        if (!symbol) {
+          return {
+            ok: false,
+            error: formatError(
+              lineNumber,
+              baseColumn + symbolStart,
+              line,
+              "Se esperaba un símbolo.",
+              "Ejemplo válido: (a,1)"
+            )
+          };
+        }
+
+        skipSpaces();
+
+        if (rest[i] !== ",") {
+          return {
+            ok: false,
+            error: formatError(
+              lineNumber,
+              baseColumn + i,
+              line,
+              "Se esperaba ','.",
+              "Ejemplo válido: (a,1)"
+            )
+          };
+        }
+
+        i++;
+        skipSpaces();
+
+        const numStart = i;
+        while (i < rest.length && /\d/.test(rest[i])) i++;
+
+        if (numStart === i) {
+          return {
+            ok: false,
+            error: formatError(
+              lineNumber,
+              baseColumn + i,
+              line,
+              "Se esperaba un número de estado.",
+              "Ejemplo válido: (a,1)"
+            )
+          };
+        }
+
+        const nextState = parseInt(rest.slice(numStart, i), 10);
+
+        skipSpaces();
+
+        if (rest[i] !== ")") {
+          return {
+            ok: false,
+            error: formatError(
+              lineNumber,
+              baseColumn + i,
+              line,
+              "Se esperaba ')'.",
+              "Ejemplo válido: (a,1)"
+            )
+          };
+        }
+
+        i++;
+
+        transitions.push({ symbol, nextState });
+
+        skipSpaces();
+
+        if (i < rest.length && rest[i] !== "(") {
+          return {
+            ok: false,
+            error: formatError(
+              lineNumber,
+              baseColumn + i,
+              line,
+              `Contenido inválido: "${rest.slice(i).trim()}"`,
+              "Solo se permiten transiciones del tipo (símbolo,número)"
+            )
+          };
+        }
+      }
+
+      if (!transitions.length) {
+        return {
+          ok: false,
+          error: formatError(
+            lineNumber,
+            baseColumn,
+            line,
+            "No se encontraron transiciones válidas.",
+            "Ejemplo válido: 12] read(a,1)(b,2)"
+          )
+        };
+      }
+
+      return { ok: true, transitions };
+    }
+
+    function levenshtein(a, b) {
+      a = a.toLowerCase();
+      b = b.toLowerCase();
+
+      const matrix = Array.from(
+        { length: a.length + 1 },
+        () => Array(b.length + 1).fill(0)
       );
-      continue;
+
+      for (let i = 0; i <= a.length; i++) {
+        matrix[i][0] = i;
+      }
+
+      for (let j = 0; j <= b.length; j++) {
+        matrix[0][j] = j;
+      }
+
+      for (let i = 1; i <= a.length; i++) {
+        for (let j = 1; j <= b.length; j++) {
+
+          const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+
+          matrix[i][j] = Math.min(
+            matrix[i - 1][j] + 1,
+            matrix[i][j - 1] + 1,
+            matrix[i - 1][j - 1] + cost
+          );
+        }
+      }
+
+      return matrix[a.length][b.length];
     }
 
-    // =========================
-    // 6. Detectar basura sobrante
-    // =========================
-    const cleaned = rest.replace(re, '').trim();
+    function suggestClosest(word, options) {
 
-    if (cleaned.length > 0) {
-      errors.push(
-        `Estado ${id}: contenido inválido "${cleaned}"`
-      );
-      continue;
+      let best = null;
+      let bestDistance = Infinity;
+
+      for (const option of options) {
+
+        const distance = levenshtein(word, option);
+
+        if (distance < bestDistance) {
+          bestDistance = distance;
+          best = option;
+        }
+      }
+
+      return bestDistance <= 2 ? best : null;
     }
 
-    // =========================
-    // 7. Guardar
-    // =========================
-    result[id] = {
-      type,
-      transitions
-    };
-  }
+    function formatError(
+      lineNumber,
+      column,
+      lineText,
+      message,
+      suggestion = ""
+    ) {
 
-  return {
-    instructions: result,
-    errors
-  };
-}
+      return [
+        `Error en línea ${lineNumber}, columna ${column}`,
+        `"${lineText}"`,
+        suggestion
+          ? `${message} ${suggestion}`
+          : message
+      ].join("\n");
+    }
+
+    function parseTransitions(
+      rest,
+      line,
+      lineNumber,
+      baseColumn
+    ) {
+
+      const transitions = [];
+
+      let i = 0;
+
+      const skipSpaces = () => {
+        while (
+          i < rest.length &&
+          /\s/.test(rest[i])
+        ) {
+          i++;
+        }
+      };
+
+      skipSpaces();
+
+      while (i < rest.length) {
+
+        if (rest[i] !== "(") {
+
+          return {
+            ok: false,
+            error: formatError(
+              lineNumber,
+              baseColumn + i,
+              line,
+              `Se esperaba "("`,
+              `Ejemplo válido: (a,1)`
+            )
+          };
+        }
+
+        i++;
+
+        skipSpaces();
+
+        const symbolStart = i;
+
+        while (
+          i < rest.length &&
+          !/[\s,)]/.test(rest[i])
+        ) {
+          i++;
+        }
+
+        const symbol = rest
+          .slice(symbolStart, i)
+          .trim();
+
+        if (!symbol) {
+
+          return {
+            ok: false,
+            error: formatError(
+              lineNumber,
+              baseColumn + symbolStart,
+              line,
+              `Se esperaba un símbolo`,
+              `Ejemplo válido: (a,1)`
+            )
+          };
+        }
+
+        skipSpaces();
+
+        if (rest[i] !== ",") {
+
+          return {
+            ok: false,
+            error: formatError(
+              lineNumber,
+              baseColumn + i,
+              line,
+              `Se esperaba ","`,
+              `Ejemplo válido: (a,1)`
+            )
+          };
+        }
+
+        i++;
+
+        skipSpaces();
+
+        const numberStart = i;
+
+        while (
+          i < rest.length &&
+          /\d/.test(rest[i])
+        ) {
+          i++;
+        }
+
+        if (numberStart === i) {
+
+          return {
+            ok: false,
+            error: formatError(
+              lineNumber,
+              baseColumn + i,
+              line,
+              `Se esperaba un número de estado`,
+              `Ejemplo válido: (a,1)`
+            )
+          };
+        }
+
+        const nextState = parseInt(
+          rest.slice(numberStart, i)
+        );
+
+        skipSpaces();
+
+        if (rest[i] !== ")") {
+
+          return {
+            ok: false,
+            error: formatError(
+              lineNumber,
+              baseColumn + i,
+              line,
+              `Se esperaba ")"`,
+              `Ejemplo válido: (a,1)`
+            )
+          };
+        }
+
+        i++;
+
+        transitions.push({
+          symbol,
+          nextState
+        });
+
+        skipSpaces();
+
+        if (
+          i < rest.length &&
+          rest[i] !== "("
+        ) {
+
+          return {
+            ok: false,
+            error: formatError(
+              lineNumber,
+              baseColumn + i,
+              line,
+              `Contenido inválido "${rest.slice(i).trim()}"`,
+              `Solo se permiten transiciones del tipo (símbolo,número)`
+            )
+          };
+        }
+      }
+
+      if (!transitions.length) {
+
+        return {
+          ok: false,
+          error: formatError(
+            lineNumber,
+            baseColumn,
+            line,
+            `No se encontraron transiciones válidas`,
+            `Ejemplo válido: 1] read(a,1)(b,2)`
+          )
+        };
+      }
+
+      return {
+        ok: true,
+        transitions
+      };
+    }
+
+    function parseProgram(text) {
+
+      const result = {};
+      const errors = [];
+
+      const validActions = [
+        "scan",
+        "write",
+        "read"
+      ];
+
+      const lines = text.split(/\r?\n/);
+
+      for (
+        let lineIndex = 0;
+        lineIndex < lines.length;
+        lineIndex++
+      ) {
+
+        const line = lines[lineIndex];
+
+        const lineNumber = lineIndex + 1;
+
+        if (!line.trim()) {
+          continue;
+        }
+
+        const base = line.match(
+          /^(\s*)(\d+)\]\s*(\w+)(.*)$/i
+        );
+
+        if (!base) {
+
+          errors.push(
+            formatError(
+              lineNumber,
+              1,
+              line,
+              `Formato inválido`,
+              `Ejemplo esperado: 1] read(a,1)(b,2)`
+            )
+          );
+
+          continue;
+        }
+
+        const [
+          ,
+          leadingSpaces,
+          idText,
+          action,
+          rest
+        ] = base;
+
+        const id = parseInt(idText);
+
+        const actionColumn =
+          leadingSpaces.length +
+          idText.length +
+          3;
+
+        if (
+          !validActions.includes(
+            action.toLowerCase()
+          )
+        ) {
+
+          const suggestion =
+            suggestClosest(
+              action,
+              validActions
+            );
+
+          errors.push(
+            formatError(
+              lineNumber,
+              actionColumn,
+              line,
+              `Acción inválida "${action}".`,
+              suggestion
+                ? `Quizás quisiste escribir "${suggestion}".`
+                : `Acciones válidas: scan, write, read.`
+            )
+          );
+
+          continue;
+        }
+
+        const type = action.toLowerCase();
+
+        if (result[id]) {
+
+          errors.push(
+            formatError(
+              lineNumber,
+              leadingSpaces.length + 1,
+              line,
+              `Estado ${id} definido más de una vez.`,
+              `Cada estado debe aparecer una sola vez.`
+            )
+          );
+
+          continue;
+        }
+
+        if (!rest.trim()) {
+
+          errors.push(
+            formatError(
+              lineNumber,
+              actionColumn + action.length,
+              line,
+              `Faltan transiciones.`,
+              `Ejemplo válido: (a,1)(b,2)`
+            )
+          );
+
+          continue;
+        }
+
+        const parsed = parseTransitions(
+          rest,
+          line,
+          lineNumber,
+          actionColumn + action.length
+        );
+
+        if (!parsed.ok) {
+          errors.push(parsed.error);
+          continue;
+        }
+
+        result[id] = {
+          type,
+          transitions: parsed.transitions
+        };
+      }
+
+      return {
+        instructions: result,
+        errors
+      };
+    }
+
   
 function parseList(str) {
   if (!str.trim()) return [];
@@ -1173,7 +1617,7 @@ function buildAll() {
   const vbox = document.getElementById('validBox');
   let html = '';
 
-  for (const e of errors) html += `<div class="v-item v-err">✗ ${e}</div>`;
+  for (const e of errors) html += `<div class="v-item v-err" style="white-space: pre-wrap;">✗ ${e}</div>`;
 
   const msgs = validateAPD(instructions, initialStates, finalStates);
   for (const { t, m } of msgs) {
