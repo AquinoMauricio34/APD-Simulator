@@ -1,0 +1,1156 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>APD Simulator — Autómatas Push-Down</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.28.1/cytoscape.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Outfit:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+<style>
+:root {
+  --bg:        #080c14;
+  --panel:     #0f1724;
+  --panel2:    #192235;
+  --border:    #1e2d45;
+  --border2:   #2e4060;
+  --text:      #dde6f0;
+  --dim:       #4f6a8a;
+  --accent:    #f0a030;
+  --accent2:   #fbbf24;
+  --scan:      #2563eb;
+  --scan-bg:   #1e3a8a;
+  --write:     #059669;
+  --write-bg:  #064e3b;
+  --read:      #dc2626;
+  --read-bg:   #7f1d1d;
+  --ok:        #22c55e;
+  --warn:      #f59e0b;
+  --err:       #ef4444;
+  --purple:    #8b5cf6;
+  --mono:      'JetBrains Mono', 'Courier New', monospace;
+  --sans:      'Outfit', system-ui, sans-serif;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; overflow: hidden; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  display: flex;
+  flex-direction: column;
+}
+
+/* ─── HEADER ─── */
+header {
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  padding: 10px 20px;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-shrink: 0;
+}
+.logo { display: flex; align-items: baseline; gap: 8px; }
+.logo h1 { font-size: 1.25rem; font-weight: 800; letter-spacing: -.03em; }
+.logo h1 em { color: var(--accent); font-style: normal; }
+.logo sub { font-family: var(--mono); font-size: .68rem; color: var(--dim); letter-spacing: .06em; }
+.header-badges { display: flex; gap: 6px; margin-left: auto; }
+.badge {
+  font-family: var(--mono);
+  font-size: .65rem;
+  padding: 3px 8px;
+  border-radius: 99px;
+  border: 1px solid var(--border2);
+  color: var(--dim);
+}
+.badge.s { background: rgba(37,99,235,.15); border-color: var(--scan); color: #93c5fd; }
+.badge.w { background: rgba(5,150,105,.15); border-color: var(--write); color: #6ee7b7; }
+.badge.r { background: rgba(220,38,38,.15); border-color: var(--read); color: #fca5a5; }
+
+/* ─── LAYOUT ─── */
+.main {
+  display: grid;
+  grid-template-columns: 290px 1fr 310px;
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* ─── PANELS ─── */
+.panel {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.panel-left  { background: var(--panel); border-right: 1px solid var(--border); }
+.panel-right { background: var(--panel); border-left:  1px solid var(--border); }
+.panel-body  { flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+.panel-center { position: relative; overflow: hidden; }
+#cy { width: 100%; height: 100%; background: var(--bg); }
+
+/* ─── SCROLLBAR ─── */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 99px; }
+
+/* ─── SECTION HEADERS ─── */
+.sec {
+  font-size: .6rem;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--dim);
+  margin-bottom: 5px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.sec::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+hr { border: none; border-top: 1px solid var(--border); margin: 2px 0; }
+
+/* ─── FORM ELEMENTS ─── */
+label { font-size: .76rem; font-weight: 600; display: block; margin-bottom: 3px; color: #94a3b8; }
+textarea, input[type=text], input[type=number] {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: .78rem;
+  padding: 7px 10px;
+  outline: none;
+  transition: border-color .15s;
+}
+textarea { resize: vertical; min-height: 140px; line-height: 1.6; }
+textarea:focus, input:focus { border-color: var(--accent); }
+.hint { font-size: .68rem; color: var(--dim); font-style: italic; margin-top: 3px; }
+
+/* ─── BUTTONS ─── */
+button {
+  font-family: var(--sans);
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  border-radius: 6px;
+  padding: 7px 13px;
+  font-size: .78rem;
+  transition: all .15s;
+  white-space: nowrap;
+}
+.btn-primary { background: var(--accent); color: #000; width: 100%; }
+.btn-primary:hover { background: var(--accent2); }
+.btn-sec { background: var(--panel2); color: var(--text); border: 1px solid var(--border); }
+.btn-sec:hover { border-color: var(--accent); color: var(--accent); }
+.btn-danger { background: rgba(239,68,68,.15); color: var(--err); border: 1px solid rgba(239,68,68,.3); }
+.btn-danger:hover { background: rgba(239,68,68,.25); }
+.btn-sm { padding: 5px 10px; font-size: .72rem; }
+.row { display: flex; gap: 6px; }
+.row button { flex: 1; }
+.btn-icon { padding: 7px 11px; }
+
+/* ─── VALIDATION ─── */
+.v-item {
+  font-family: var(--mono);
+  font-size: .7rem;
+  padding: 5px 9px;
+  border-radius: 5px;
+  border-left: 3px solid;
+  margin-bottom: 3px;
+  line-height: 1.4;
+}
+.v-ok   { background: rgba(34,197,94,.08);   border-color: var(--ok);   color: #86efac; }
+.v-warn { background: rgba(245,158,11,.08);  border-color: var(--warn); color: #fde68a; }
+.v-err  { background: rgba(239,68,68,.08);   border-color: var(--err);  color: #fca5a5; }
+
+/* ─── MODE SELECTOR ─── */
+.mode-sel { display: flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.mode-btn { flex: 1; background: transparent; color: var(--dim); border: none; border-radius: 0; padding: 6px; font-size: .74rem; font-family: var(--sans); font-weight: 600; cursor: pointer; transition: all .15s; }
+.mode-btn.active { background: var(--accent); color: #000; }
+
+/* ─── CONFIG DISPLAY ─── */
+.config-box {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 12px;
+  font-family: var(--mono);
+  font-size: .75rem;
+}
+.cr { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 3px; }
+.cl { color: var(--dim); width: 72px; flex-shrink: 0; }
+.cv { color: var(--accent2); word-break: break-all; }
+.cv.input-str span.read { color: var(--dim); text-decoration: line-through; }
+.cv.input-str span.cur { color: var(--ok); font-weight: 600; }
+.cv.input-str span.rem { color: var(--text); }
+
+/* ─── STACK ─── */
+.stack-box {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px;
+  min-height: 48px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.stack-item {
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 3px 10px;
+  font-family: var(--mono);
+  font-size: .72rem;
+  text-align: center;
+}
+.stack-top { background: rgba(240,160,48,.12); border-color: var(--accent); color: var(--accent2); font-weight: 700; }
+.stack-empty { color: var(--dim); font-family: var(--mono); font-size: .72rem; text-align: center; padding: 8px; }
+
+/* ─── HISTORY ─── */
+.step-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+.step-entry {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-family: var(--mono);
+  font-size: .68rem;
+  cursor: pointer;
+  transition: border-color .12s;
+  line-height: 1.4;
+}
+.step-entry:hover { border-color: var(--border2); }
+.step-entry.cur { border-color: var(--accent); background: rgba(240,160,48,.06); }
+.sa { color: var(--accent); }
+.sq { color: var(--purple); }
+.si { color: #38bdf8; }
+.ss { color: var(--ok); }
+
+/* ─── BRANCHES (NonDet) ─── */
+.branch-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 180px;
+  overflow-y: auto;
+}
+.branch-entry {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-family: var(--mono);
+  font-size: .68rem;
+  line-height: 1.4;
+}
+.branch-active   { border-color: var(--scan); background: rgba(37,99,235,.06); }
+.branch-accepted { border-color: var(--ok);   background: rgba(34,197,94,.06); }
+.branch-dead     { opacity: .35; }
+
+/* ─── RESULT ─── */
+.result {
+  text-align: center;
+  padding: 12px;
+  border-radius: 6px;
+  font-weight: 800;
+  font-size: 1rem;
+  letter-spacing: .02em;
+  display: none;
+  animation: fadeIn .3s ease;
+}
+.result.show { display: block; }
+.result-ok { background: rgba(34,197,94,.12); border: 2px solid var(--ok); color: var(--ok); }
+.result-no { background: rgba(239,68,68,.12); border: 2px solid var(--err); color: var(--err); }
+
+/* ─── LEGEND ─── */
+.legend {
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+  background: rgba(15,23,36,.92);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 9px 13px;
+  font-size: .68rem;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  backdrop-filter: blur(4px);
+}
+.leg { display: flex; align-items: center; gap: 7px; }
+.dot {
+  width: 13px; height: 13px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  flex-shrink: 0;
+}
+
+/* ─── GRAPH OVERLAY ─── */
+.graph-toolbar {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: flex;
+  gap: 5px;
+}
+.graph-badge {
+  background: rgba(15,23,36,.9);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-family: var(--mono);
+  font-size: .68rem;
+  color: var(--dim);
+  backdrop-filter: blur(4px);
+}
+
+/* ─── ANIMATIONS ─── */
+@keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@keyframes pulse  { 0%,100% { box-shadow: 0 0 0 0 rgba(139,92,246,.4); } 50% { box-shadow: 0 0 0 8px rgba(139,92,246,0); } }
+
+/* ─── MISC ─── */
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <h1>APD <em>Simulator</em></h1>
+    <sub>SCAN · WRITE · READ</sub>
+  </div>
+  <div class="header-badges">
+    <span class="badge s">S Scan</span>
+    <span class="badge w">W Write</span>
+    <span class="badge r">R Read</span>
+  </div>
+</header>
+
+<div class="main">
+
+  <!-- ═══ LEFT PANEL ═══ -->
+  <div class="panel panel-left">
+    <div class="panel-body">
+
+      <div>
+        <div class="sec">Instrucciones del Programa</div>
+        <label>Formato: N] tipo (símbolo,estado) ...</label>
+        <textarea id="instrInput" spellcheck="false"
+          placeholder="1] scan (a,2) (b,3) (c,4)&#10;2] write (a,1)&#10;3] write (b,1)&#10;4] scan (a,5) (b,6)&#10;5] read (a,4)&#10;6] read (b,4)"></textarea>
+        <p class="hint">scan · write · read  |  un estado por línea</p>
+      </div>
+
+      <div class="two-col">
+        <div>
+          <label>Estado(s) inicial(es)</label>
+          <input type="text" id="initialInput" placeholder="1">
+        </div>
+        <div>
+          <label>Estado(s) final(es)</label>
+          <input type="text" id="finalInput" placeholder="4">
+        </div>
+      </div>
+
+      <div>
+        <label>Límite de pila (anti-loop infinito)</label>
+        <input type="number" id="stackLimit" value="100" min="5" max="2000">
+      </div>
+
+      <button class="btn-primary" onclick="buildAll()">▶ Construir Diagrama</button>
+
+      <hr>
+
+      <div>
+        <div class="sec">Validación APD</div>
+        <div id="validBox"><p class="hint">Construye el diagrama para ver resultados.</p></div>
+      </div>
+
+      <hr>
+
+      <div>
+        <div class="sec">Ejemplo Rápido</div>
+        <button class="btn-sec btn-sm" onclick="loadExample()">Cargar M_cm (copia wcw)</button>
+        <p class="hint" style="margin-top:4px">Acepta cadenas de forma wcw donde w ∈ {a,b}*</p>
+      </div>
+
+      <div>
+        <div class="sec">¿No se entiende algo?</div>
+        <button class="btn-sec btn-sm" onclick="window.open('https://github.com/AquinoMauricio34/APD-Simulator', '_blank')">
+          <i class="fab fa-github"></i> GitHub
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ═══ CENTER — DIAGRAM ═══ -->
+  <div class="panel panel-center">
+    <div id="cy"></div>
+
+    <div class="graph-toolbar">
+      <span class="graph-badge" id="graphBadge">Sin diagrama</span>
+      <button class="btn-sec btn-sm btn-icon" title="Ajustar vista" onclick="fitGraph()">⊡ Fit</button>
+      <button class="btn-sec btn-sm btn-icon" title="Re-layout" onclick="relayout()">⟳</button>
+    </div>
+
+    <div class="legend">
+      <div class="sec" style="margin-bottom:2px">Leyenda</div>
+      <div class="leg"><div class="dot" style="background:#1e3a8a;border-color:#2563eb"></div>S — Scan (lee entrada)</div>
+      <div class="leg"><div class="dot" style="background:#064e3b;border-color:#059669"></div>W — Write (escribe pila)</div>
+      <div class="leg"><div class="dot" style="background:#7f1d1d;border-color:#dc2626"></div>R — Read (lee pila)</div>
+      <div class="leg"><div class="dot" style="background:transparent;border-color:#f0a030;border-width:3px"></div>Estado final (doble borde)</div>
+      <div class="leg"><div class="dot" style="background:transparent;border-color:#FFF000;border-width:3px"></div>Estado activo (simulación)</div>
+      <div class="leg"><div class="dot" style="background:#f0a030;border-color:#f0a030;border-width:2px"></div>→ flecha: estado inicial</div>
+    </div>
+  </div>
+
+  <!-- ═══ RIGHT PANEL ═══ -->
+  <div class="panel panel-right">
+    <div class="panel-body">
+
+      <div>
+        <div class="sec">Modo de Simulación</div>
+        <div class="mode-sel">
+          <button class="mode-btn active" id="modeDet"    onclick="setMode('det')">Determinístico</button>
+          <button class="mode-btn"        id="modeNonDet" onclick="setMode('nondet')">No Determinístico</button>
+        </div>
+      </div>
+
+      <div>
+        <label>Cadena de entrada (vacía = λ)</label>
+        <input type="text" id="inputStr" placeholder="aacaa"
+          onkeydown="if(event.key==='Enter') doRun()">
+      </div>
+
+      <div class="row">
+        <button class="btn-primary" onclick="doRun()" title="Ejecutar completo">▶ Ejecutar</button>
+        <button class="btn-sec btn-icon" onclick="doBack()"  title="Paso atrás">◀</button>
+        <button class="btn-sec btn-icon" onclick="doStep()"  title="Paso adelante">▶|</button>
+        <button class="btn-sec btn-icon btn-danger" onclick="doReset()" title="Reiniciar">↺</button>
+      </div>
+
+      <hr>
+
+      <div>
+        <div class="sec">Configuración Actual (q, φ, σ)</div>
+        <div class="config-box" id="configBox">
+          <p class="hint">Sin simulación activa.</p>
+        </div>
+      </div>
+
+      <div>
+        <div class="sec">Pila σ (tope arriba)</div>
+        <div class="stack-box" id="stackBox">
+          <p class="stack-empty">λ (vacía)</p>
+        </div>
+      </div>
+
+      <div id="branchSection" style="display:none">
+        <div class="sec">Ramas Activas</div>
+        <div class="branch-list" id="branchList"></div>
+      </div>
+
+      <div>
+        <div class="sec">Historial de Pasos</div>
+        <div class="step-list" id="stepList">
+          <p class="hint">Los pasos aparecerán aquí.</p>
+        </div>
+      </div>
+
+      <div id="resultBanner" class="result"></div>
+
+    </div>
+  </div>
+
+</div>
+
+<script>
+'use strict';
+
+// ─────────────────────────────────────────────
+// GLOBAL STATE
+// ─────────────────────────────────────────────
+let instructions = {};   // { id: { type, transitions:[{symbol,nextState}] } }
+let initialStates = [];
+let finalStates   = [];
+let cy = null;
+let simMode = 'det';
+
+// ─── Det simulation ───
+let detHistory  = [];   // [{config, action}]
+let detCursor   = -1;
+let detTerminal = false;
+
+// ─── NonDet simulation ───
+let ndFrontier  = [];   // [{state,inputPos,input,stack,action,dead,accepted}]
+let ndVisited   = new Set();
+let ndDone      = false;
+let ndHistory   = [];   // snapshot of frontier at each step
+let ndCursor    = -1;
+
+// ─────────────────────────────────────────────
+// PARSER
+// ─────────────────────────────────────────────
+function parseProgram(text) {
+  const result = {};
+  const errors = [];
+  const lines  = text.split('\n').map(l => l.trim()).filter(Boolean);
+
+  for (const line of lines) {
+    const m = line.match(/^(\d+)\]\s*(scan|write|read)\s+([\s\S]+)$/i);
+    if (!m) { errors.push(`Línea no reconocida: "${line}"`); continue; }
+
+    const id   = parseInt(m[1]);
+    const type = m[2].toLowerCase();
+    const rest = m[3];
+
+    if (result[id]) { errors.push(`Estado ${id} definido más de una vez`); continue; }
+
+    const transitions = [];
+    const re = /\(\s*([^,)\s]+)\s*,\s*(\d+)\s*\)/g;
+    let tm;
+    while ((tm = re.exec(rest)) !== null) {
+      transitions.push({ symbol: tm[1].trim(), nextState: parseInt(tm[2]) });
+    }
+
+    if (!transitions.length) { errors.push(`Estado ${id}: sin transiciones válidas`); continue; }
+    result[id] = { type, transitions };
+  }
+  return { instructions: result, errors };
+}
+
+function parseList(str) {
+  if (!str.trim()) return [];
+  return str.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n));
+}
+
+// ─────────────────────────────────────────────
+// VALIDATION
+// ─────────────────────────────────────────────
+function validateAPD(instr, initials, finals) {
+  const msgs = [];
+
+  if (!initials.length) msgs.push({ t:'err', m:'No hay estados iniciales definidos.' });
+  if (!finals.length)   msgs.push({ t:'warn', m:'No hay estados finales definidos.' });
+
+  // write → read immediately (APD impropio)
+  for (const [id, inst] of Object.entries(instr)) {
+    if (inst.type !== 'write') continue;
+    for (const tr of inst.transitions) {
+      const next = instr[tr.nextState];
+      if (next && next.type === 'read') {
+        msgs.push({ t:'err', m:`APD Impropio: write(${id}) → read(${tr.nextState}) de forma inmediata — sin efecto neto.` });
+      }
+    }
+  }
+
+  // Deterministic checks
+  if (simMode === 'det') {
+    for (const [id, inst] of Object.entries(instr)) {
+      if (inst.type === 'write' && inst.transitions.length > 1) {
+        msgs.push({ t:'warn', m:`Estado ${id} (write) tiene ${inst.transitions.length} transiciones — no determinístico en modo DET.` });
+      }
+      if (inst.type === 'scan' || inst.type === 'read') {
+        const syms = inst.transitions.map(t => t.symbol);
+        const seen = new Set();
+        for (const s of syms) {
+          if (seen.has(s)) { msgs.push({ t:'warn', m:`Estado ${id} (${inst.type}): símbolo '${s}' duplicado — no determinístico en modo DET.` }); break; }
+          seen.add(s);
+        }
+      }
+    }
+  }
+
+  // Write cycle detection (write-only reachability from each write state)
+  const writeIds = Object.entries(instr).filter(([,v]) => v.type === 'write').map(([k]) => parseInt(k));
+  const reported = new Set();
+  for (const start of writeIds) {
+    // DFS through write-only states
+    const visited = new Set();
+    const stack   = [{ id: start, path: [start] }];
+    while (stack.length) {
+      const { id, path } = stack.pop();
+      const inst = instr[id];
+      if (!inst || inst.type !== 'write') continue;
+      for (const tr of inst.transitions) {
+        const key = path.join('-') + '-' + tr.nextState;
+        if (path.includes(tr.nextState)) {
+          const cycleKey = [...path, tr.nextState].sort().join(',');
+          if (!reported.has(cycleKey)) {
+            reported.add(cycleKey);
+            msgs.push({ t:'warn', m:`Ciclo de write sin scan: ${path.join('→')}→${tr.nextState} — la pila puede crecer indefinidamente.` });
+          }
+        } else if (!visited.has(tr.nextState)) {
+          visited.add(tr.nextState);
+          stack.push({ id: tr.nextState, path: [...path, tr.nextState] });
+        }
+      }
+    }
+  }
+
+  if (!msgs.filter(m => m.t === 'err').length) {
+    msgs.unshift({ t:'ok', m:'Sin errores críticos detectados.' });
+  }
+  return msgs;
+}
+
+// ─────────────────────────────────────────────
+// GRAPH
+// ─────────────────────────────────────────────
+function buildElements(instr, initials, finals) {
+  const allStates = new Set();
+  for (const [id, inst] of Object.entries(instr)) {
+    allStates.add(parseInt(id));
+    inst.transitions.forEach(t => allStates.add(t.nextState));
+  }
+  initials.forEach(s => allStates.add(s));
+  finals.forEach(s => allStates.add(s));
+
+  const els = [];
+
+  // Virtual start nodes
+  for (const s of initials) {
+    els.push({ data: { id: `_s${s}` }, classes: 'vstart' });
+    els.push({ data: { id: `_se${s}`, source: `_s${s}`, target: `n${s}`, label: '' }, classes: 'vstart-edge' });
+  }
+
+  // State nodes
+  for (const id of allStates) {
+    const inst = instr[id];
+    const type = inst ? inst.type : 'unknown';
+    const ltr  = { scan:'S', write:'W', read:'R' }[type] || '?';
+    const cls  = ['state', type, finals.includes(id) ? 'final' : ''].filter(Boolean).join(' ');
+    els.push({ data: { id: `n${id}`, label: `${ltr}\n${id}`, stateId: id, type, isFinal: finals.includes(id) }, classes: cls });
+  }
+
+  // Merge parallel edges (same source→target → combined label)
+  const edgeMap = {};
+  for (const [id, inst] of Object.entries(instr)) {
+    for (const tr of inst.transitions) {
+      const key = `${id}_${tr.nextState}`;
+      if (!edgeMap[key]) edgeMap[key] = { src: id, tgt: tr.nextState, syms: [] };
+      edgeMap[key].syms.push(tr.symbol);
+    }
+  }
+
+  let ei = 0;
+  for (const [key, e] of Object.entries(edgeMap)) {
+    const isSelf = parseInt(e.src) === e.tgt;
+    els.push({
+      data: { id: `e${ei++}`, source: `n${e.src}`, target: `n${e.tgt}`, label: e.syms.join(', ') },
+      classes: isSelf ? 'self-loop' : ''
+    });
+  }
+
+  return els;
+}
+
+function initCytoscape(elements) {
+  if (cy) cy.destroy();
+  cy = cytoscape({
+    container: document.getElementById('cy'),
+    elements,
+    style: cyStyle(),
+    layout: {
+      name: 'cose',
+      idealEdgeLength: 120,
+      nodeRepulsion: 500000,
+      nodeOverlap: 20,
+      gravity: 1,
+      numIter: 1000,
+      fit: true,
+      padding: 50,
+      randomize: false,
+      componentSpacing: 80
+    },
+    userZoomingEnabled: true,
+    userPanningEnabled: true,
+    boxSelectionEnabled: false
+  });
+
+  // Position virtual start nodes after layout
+  cy.on('layoutstop', () => {
+    for (const s of initialStates) {
+      const tgt = cy.getElementById(`n${s}`);
+      const src = cy.getElementById(`_s${s}`);
+      if (tgt.length && src.length) {
+        const pos = tgt.position();
+        src.position({ x: pos.x - 70, y: pos.y });
+      }
+    }
+  });
+
+  const states = cy.nodes('.state').length;
+  const edges  = cy.edges(':not(.vstart-edge)').length;
+  document.getElementById('graphBadge').textContent = `${states} estados · ${edges} transiciones`;
+}
+
+function cyStyle() {
+  return [
+    // State nodes
+    { selector: 'node.state', style: {
+      shape: 'ellipse', width: 54, height: 54,
+      label: 'data(label)', 'text-wrap': 'wrap', 'text-valign': 'center', 'text-halign': 'center',
+      'font-family': 'JetBrains Mono, monospace', 'font-size': 15, 'font-weight': 600,
+      color: '#fff', 'border-width': 2, 'border-color': '#1e2d45'
+    }},
+    { selector: 'node.scan',    style: { 'background-color': '#1e3a8a', 'border-color': '#2563eb' }},
+    { selector: 'node.write',   style: { 'background-color': '#064e3b', 'border-color': '#059669' }},
+    { selector: 'node.read',    style: { 'background-color': '#7f1d1d', 'border-color': '#dc2626' }},
+    { selector: 'node.unknown', style: { 'background-color': '#1e293b', 'border-color': '#475569' }},
+    { selector: 'node.final',   style: { 'border-width': 5, 'border-style': 'double', 'border-color': '#f0a030' }},
+    { selector: 'node.active',  style: { 'border-width': 4, 'border-color': '#FFF000', 'background-color': '#4c1d95', 'border-style': 'solid' }},
+    { selector: 'node.active.scan',  style: { 'background-color': '#312e81', 'border-color': '#FFF000' }},
+    { selector: 'node.active.write', style: { 'background-color': '#14532d', 'border-color': '#FFF000' }},
+    { selector: 'node.active.read',  style: { 'background-color': '#450a0a', 'border-color': '#FFF000' }},
+
+    // Virtual start nodes
+    { selector: 'node.vstart', style: { width: 1, height: 1, opacity: 0 }},
+
+    // Edges
+    { selector: 'edge', style: {
+      width: 2, 'line-color': '#2e4060',
+      'target-arrow-shape': 'triangle', 'target-arrow-color': '#2e4060',
+      'curve-style': 'bezier',
+      label: 'data(label)',
+      'font-family': 'JetBrains Mono, monospace', 'font-size': 14, 'font-weight': 700,
+      color: '#64748b',
+      'text-background-color': '#080c14', 'text-background-opacity': 1, 'text-background-padding': '2px',
+      'control-point-step-size': 50
+    }},
+    { selector: 'edge.self-loop', style: {
+      'curve-style': 'loop', 'loop-direction': '0deg', 'loop-sweep': '50deg'
+    }},
+    { selector: 'edge.vstart-edge', style: {
+      width: 2, 'line-color': '#f0a030', 'target-arrow-color': '#f0a030',
+      'target-arrow-shape': 'triangle', 'curve-style': 'bezier', label: ''
+    }},
+    { selector: 'edge.active-edge', style: {
+      'line-color': '#8b5cf6', 'target-arrow-color': '#8b5cf6', width: 3
+    }}
+  ];
+}
+
+function fitGraph()   { if (cy) cy.fit(undefined, 50); }
+function relayout()   {
+  if (!cy) return;
+  cy.layout({
+    name: 'cose', idealEdgeLength: 120, nodeRepulsion: 500000, nodeOverlap: 20,
+    gravity: 1, numIter: 1000, fit: true, padding: 50, randomize: true, componentSpacing: 80
+  }).run();
+}
+
+// ─────────────────────────────────────────────
+// SIMULATION CORE
+// ─────────────────────────────────────────────
+function getNextConfigs(config) {
+  const { state, inputPos, input, stack } = config;
+  const inst = instructions[state];
+  if (!inst) return [];
+
+  const lim = getStackLimit();
+  if (stack.length >= lim) return [];
+
+  const results = [];
+  for (const tr of inst.transitions) {
+    if (inst.type === 'scan') {
+      if (inputPos < input.length && input[inputPos] === tr.symbol) {
+        results.push({ state: tr.nextState, inputPos: inputPos + 1, input, stack: [...stack], action: `scan(${tr.symbol})` });
+      }
+    } else if (inst.type === 'write') {
+      results.push({ state: tr.nextState, inputPos, input, stack: [...stack, tr.symbol], action: `write(${tr.symbol})` });
+    } else if (inst.type === 'read') {
+      const top = stack[stack.length - 1];
+      if (stack.length > 0 && top === tr.symbol) {
+        results.push({ state: tr.nextState, inputPos, input, stack: stack.slice(0, -1), action: `read(${tr.symbol})` });
+      }
+    }
+  }
+  return results;
+}
+
+function isAccepted(config) {
+  return config.inputPos >= config.input.length
+    && config.stack.length === 0
+    && finalStates.includes(config.state);
+}
+
+function configKey(c) {
+  return `${c.state}|${c.inputPos}|${c.stack.join(',')}`;
+}
+
+function getStackLimit() { return parseInt(document.getElementById('stackLimit').value) || 100; }
+
+// ─── DETERMINISTIC ───
+function initDet() {
+  const input = document.getElementById('inputStr').value;
+  const init  = { state: initialStates[0], inputPos: 0, input, stack: [] };
+  detHistory  = [{ config: init, action: 'inicio' }];
+  detCursor   = 0;
+  detTerminal = isAccepted(init);
+  renderDetStep(0);
+}
+
+function stepDetForward() {
+  if (!detHistory.length) { initDet(); return; }
+
+  if (detCursor < detHistory.length - 1) {
+    detCursor++;
+    renderDetStep(detCursor);
+    return;
+  }
+  if (detTerminal) return;
+
+  const { config } = detHistory[detCursor];
+  const nexts = getNextConfigs(config);
+
+  if (!nexts.length) {
+    detTerminal = true;
+    renderDetStep(detCursor);
+    return;
+  }
+
+  const next = nexts[0]; // deterministic: take first
+  detHistory.push({ config: next, action: next.action });
+  detCursor++;
+
+  if (isAccepted(next)) detTerminal = true;
+  renderDetStep(detCursor);
+}
+
+function stepDetBack() {
+  if (detCursor > 0) { detCursor--; renderDetStep(detCursor); }
+}
+
+function runDetFull() {
+  initDet();
+  let steps = 0, max = 2000;
+  while (!detTerminal && steps++ < max) stepDetForward();
+  renderDetStep(detCursor);
+}
+
+// ─── NON-DETERMINISTIC ───
+function initNonDet() {
+  const input = document.getElementById('inputStr').value;
+  ndVisited   = new Set();
+  ndHistory   = [];
+  ndDone      = false;
+
+  const initFrontier = initialStates.map(s => {
+    const cfg = { state: s, inputPos: 0, input, stack: [], action: 'inicio' };
+    const acc = isAccepted(cfg);
+    ndVisited.add(configKey(cfg));
+    return { ...cfg, dead: false, accepted: acc };
+  });
+
+  ndFrontier = initFrontier;
+  ndHistory  = [initFrontier];
+  ndCursor   = 0;
+
+  if (ndFrontier.some(c => c.accepted)) ndDone = true;
+  if (ndFrontier.every(c => c.dead || c.accepted)) ndDone = true;
+
+  renderNdStep();
+}
+
+function stepNonDetForward() {
+  if (!ndHistory.length) { initNonDet(); return; }
+  if (ndCursor < ndHistory.length - 1) { ndCursor++; renderNdStep(); return; }
+  if (ndDone) return;
+
+  const newFrontier = [];
+  for (const c of ndFrontier) {
+    if (c.dead || c.accepted) { newFrontier.push(c); continue; }
+    const nexts = getNextConfigs(c);
+    if (!nexts.length) { newFrontier.push({ ...c, dead: true }); continue; }
+    for (const n of nexts) {
+      const key = configKey(n);
+      if (ndVisited.has(key)) continue; // avoid revisiting same config
+      ndVisited.add(key);
+      newFrontier.push({ ...n, dead: false, accepted: isAccepted(n) });
+    }
+    if (!nexts.filter(n => !ndVisited.has(configKey(n))).length) {
+      // All successors visited — keep current as dead to avoid infinite loop
+    }
+  }
+
+  ndFrontier = newFrontier.length ? newFrontier : ndFrontier.map(c => ({...c, dead: true}));
+  ndHistory.push([...ndFrontier]);
+  ndCursor++;
+
+  if (ndFrontier.some(c => c.accepted)) ndDone = true;
+  if (ndFrontier.every(c => c.dead || c.accepted)) ndDone = true;
+
+  renderNdStep();
+}
+
+function stepNonDetBack() {
+  if (ndCursor > 0) { ndCursor--; ndFrontier = ndHistory[ndCursor]; renderNdStep(); }
+}
+
+function runNonDetFull() {
+  initNonDet();
+  let steps = 0, max = 1000;
+  while (!ndDone && steps++ < max) {
+    const prev = ndFrontier;
+    stepNonDetForward();
+    if (ndFrontier === prev) break; // no progress
+  }
+  renderNdStep();
+}
+
+// ─────────────────────────────────────────────
+// RENDER
+// ─────────────────────────────────────────────
+function renderDetStep(idx) {
+  if (idx < 0 || idx >= detHistory.length) return;
+  const { config, action } = detHistory[idx];
+  const isLast = idx === detHistory.length - 1;
+  const finished = isLast && detTerminal;
+
+  updateConfigPanel(config, action);
+  highlightState(config.state);
+
+  // History list
+  const list = document.getElementById('stepList');
+  list.innerHTML = '';
+  detHistory.forEach(({ config: c, action: a }, i) => {
+    const rem = c.input.substring(c.inputPos) || 'λ';
+    const stk = c.stack.length ? '[' + c.stack.join(',') + ']' : '[λ]';
+    const div = document.createElement('div');
+    div.className = 'step-entry' + (i === idx ? ' cur' : '');
+    div.innerHTML = `<span class="sa">${a}</span> → <span class="sq">q${c.state}</span> | φ=<span class="si">${rem}</span> | σ=<span class="ss">${stk}</span>`;
+    div.onclick = () => { detCursor = i; renderDetStep(i); };
+    list.appendChild(div);
+  });
+  list.children[idx]?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+
+  // Result
+  if (finished) {
+    showResult(isAccepted(config));
+  } else {
+    hideResult();
+  }
+
+  document.getElementById('branchSection').style.display = 'none';
+}
+
+function renderNdStep() {
+  const frontier = ndHistory[ndCursor] || ndFrontier;
+  document.getElementById('branchSection').style.display = '';
+
+  // Branches display
+  const blist = document.getElementById('branchList');
+  blist.innerHTML = '';
+  for (const c of frontier) {
+    const rem = c.input.substring(c.inputPos) || 'λ';
+    const stk = c.stack.length ? '[' + c.stack.join(',') + ']' : '[λ]';
+    const cls = c.accepted ? 'branch-accepted' : c.dead ? 'branch-dead' : 'branch-active';
+    const icon = c.accepted ? '✓' : c.dead ? '✗' : '●';
+    const div = document.createElement('div');
+    div.className = 'branch-entry ' + cls;
+    div.innerHTML = `${icon} <span class="sa">${c.action}</span> <span class="sq">q${c.state}</span> | φ=<span class="si">${rem}</span> | σ=<span class="ss">${stk}</span>`;
+    blist.appendChild(div);
+  }
+
+  // Highlight all active states
+  highlightStates(frontier.filter(c => !c.dead).map(c => c.state));
+
+  // Show first active config in detail
+  const first = frontier.find(c => !c.dead && !c.accepted) || frontier.find(c => c.accepted) || frontier[0];
+  if (first) updateConfigPanel(first, first.action);
+
+  // History as steps
+  const list = document.getElementById('stepList');
+  list.innerHTML = '';
+  ndHistory.forEach((snap, i) => {
+    const active = snap.filter(c => !c.dead && !c.accepted).length;
+    const acc    = snap.filter(c => c.accepted).length;
+    const dead   = snap.filter(c => c.dead).length;
+    const div = document.createElement('div');
+    div.className = 'step-entry' + (i === ndCursor ? ' cur' : '');
+    div.innerHTML = `Paso ${i}: <span style="color:var(--ok)">${acc} aceptada(s)</span> · <span style="color:#38bdf8">${active} activa(s)</span> · <span style="color:var(--dim)">${dead} muerta(s)</span>`;
+    div.onclick = () => { ndCursor = i; ndFrontier = ndHistory[i]; renderNdStep(); };
+    list.appendChild(div);
+  });
+  list.children[ndCursor]?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+
+  // Result
+  const isAtEnd = ndCursor === ndHistory.length - 1;
+  if (isAtEnd && ndDone) {
+    const accepted = frontier.some(c => c.accepted);
+    showResult(accepted);
+  } else {
+    hideResult();
+  }
+}
+
+function updateConfigPanel(config, action) {
+  const rem  = config.input.substring(config.inputPos);
+  const read = config.input.substring(0, config.inputPos);
+  const inst = instructions[config.state];
+  const type = inst ? inst.type : '?';
+
+  document.getElementById('configBox').innerHTML = `
+    <div class="cr"><span class="cl">Estado q:</span><span class="cv">${config.state} <span style="color:var(--dim);font-size:.65rem">(${type})</span></span></div>
+    <div class="cr"><span class="cl">Acción:</span><span class="cv">${action}</span></div>
+    <div class="cr"><span class="cl">Entrada φ:</span><span class="cv input-str">
+      <span class="read">${read || ''}</span><span class="cur">${rem[0] || ''}</span><span class="rem">${rem.substring(1)}</span>
+      ${!rem ? '<span style="color:var(--ok)"> λ (leída)</span>' : ''}
+    </span></div>
+    <div class="cr"><span class="cl">|φ| resto:</span><span class="cv">${rem.length} símbolo(s)</span></div>
+  `;
+
+  // Stack
+  const sbox = document.getElementById('stackBox');
+  if (!config.stack.length) {
+    sbox.innerHTML = '<p class="stack-empty">λ (vacía)</p>';
+  } else {
+    const items = [...config.stack].reverse();
+    sbox.innerHTML = items.map((s, i) =>
+      `<div class="stack-item ${i === 0 ? 'stack-top' : ''}">${s}${i === 0 ? '  ← tope' : ''}</div>`
+    ).join('');
+  }
+}
+
+function highlightState(id) {
+  if (!cy) return;
+  cy.nodes('.state').removeClass('active');
+  cy.getElementById(`n${id}`).addClass('active');
+}
+
+function highlightStates(ids) {
+  if (!cy) return;
+  cy.nodes('.state').removeClass('active');
+  for (const id of ids) cy.getElementById(`n${id}`).addClass('active');
+}
+
+function showResult(accepted) {
+  const el = document.getElementById('resultBanner');
+  el.className = 'result show ' + (accepted ? 'result-ok' : 'result-no');
+  el.textContent = accepted ? '✓  CADENA ACEPTADA' : '✗  CADENA RECHAZADA';
+}
+function hideResult() {
+  const el = document.getElementById('resultBanner');
+  el.className = 'result';
+  el.textContent = '';
+}
+
+function resetDisplay() {
+  document.getElementById('stepList').innerHTML   = '<p class="hint">Los pasos aparecerán aquí.</p>';
+  document.getElementById('configBox').innerHTML  = '<p class="hint">Sin simulación activa.</p>';
+  document.getElementById('stackBox').innerHTML   = '<p class="stack-empty">λ (vacía)</p>';
+  document.getElementById('branchList').innerHTML = '';
+  document.getElementById('branchSection').style.display = 'none';
+  hideResult();
+  cy?.nodes('.state').removeClass('active');
+}
+
+// ─────────────────────────────────────────────
+// UI ACTIONS
+// ─────────────────────────────────────────────
+function buildAll() {
+  const text    = document.getElementById('instrInput').value;
+  const initStr = document.getElementById('initialInput').value;
+  const finStr  = document.getElementById('finalInput').value;
+
+  const { instructions: parsed, errors } = parseProgram(text);
+  instructions  = parsed;
+  initialStates = parseList(initStr);
+  finalStates   = parseList(finStr);
+
+  const vbox = document.getElementById('validBox');
+  let html = '';
+
+  for (const e of errors) html += `<div class="v-item v-err">✗ ${e}</div>`;
+
+  const msgs = validateAPD(instructions, initialStates, finalStates);
+  for (const { t, m } of msgs) {
+    const cls  = { ok:'v-ok', warn:'v-warn', err:'v-err' }[t];
+    const icon = { ok:'✓', warn:'⚠', err:'✗' }[t];
+    html += `<div class="v-item ${cls}">${icon} ${m}</div>`;
+  }
+  vbox.innerHTML = html || '<p class="hint">Sin mensajes.</p>';
+
+  if (errors.length) return;
+
+  const els = buildElements(instructions, initialStates, finalStates);
+  initCytoscape(els);
+  resetDisplay();
+
+  // Reset sim state
+  detHistory = []; detCursor = -1; detTerminal = false;
+  ndFrontier = []; ndHistory = []; ndCursor = -1; ndDone = false;
+}
+
+function setMode(mode) {
+  simMode = mode;
+  document.getElementById('modeDet').className    = 'mode-btn' + (mode === 'det'    ? ' active' : '');
+  document.getElementById('modeNonDet').className = 'mode-btn' + (mode === 'nondet' ? ' active' : '');
+  resetDisplay();
+  detHistory = []; detCursor = -1; detTerminal = false;
+  ndFrontier = []; ndHistory = []; ndCursor = -1; ndDone = false;
+}
+
+function checkReady() {
+  if (!Object.keys(instructions).length) { alert('Construye el diagrama primero.'); return false; }
+  if (!initialStates.length) { alert('Define al menos un estado inicial.'); return false; }
+  return true;
+}
+
+function doRun() {
+  if (!checkReady()) return;
+  resetDisplay();
+  if (simMode === 'det') runDetFull();
+  else runNonDetFull();
+}
+
+function doStep() {
+  if (!checkReady()) return;
+  if (simMode === 'det') {
+    if (!detHistory.length) { initDet(); return; }
+    stepDetForward();
+  } else {
+    if (!ndHistory.length) { initNonDet(); return; }
+    stepNonDetForward();
+  }
+}
+
+function doBack() {
+  if (simMode === 'det') { if (detHistory.length) stepDetBack(); }
+  else { if (ndHistory.length) stepNonDetBack(); }
+}
+
+function doReset() {
+  resetDisplay();
+  detHistory = []; detCursor = -1; detTerminal = false;
+  ndFrontier = []; ndHistory = []; ndCursor = -1; ndDone = false;
+}
+
+function loadExample() {
+  document.getElementById('instrInput').value =
+`1] scan (a,2) (b,3) (c,4)
+2] write (a,1)
+3] write (b,1)
+4] scan (a,5) (b,6)
+5] read (a,4)
+6] read (b,4)`;
+  document.getElementById('initialInput').value = '1';
+  document.getElementById('finalInput').value   = '4';
+  buildAll();
+}
+
+// ─────────────────────────────────────────────
+// INIT
+// ─────────────────────────────────────────────
+loadExample();
+</script>
+</body>
+</html>
