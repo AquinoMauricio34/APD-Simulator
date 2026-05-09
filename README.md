@@ -49,6 +49,8 @@
 ## Historial de Pasos
 - Lista de pasos que se realizan para realizar la verificación de w.
 - Cada linea representa un paso y contiene: <acción>(<simbolo>) -> <estado> | <string_sin_escanear> | <string_pila>
+- Ejemplo:
 - Linea 1: inicio -> q1 | φ=aacaa | σ=[λ] (la configucación de inicio. Formalmente (q1,λ,λ))
 - Linea 2: scan(a) -> q2 | φ=acaa | σ=[λ] (en el string w se apunta al primer simbolo y se realiza transición a q2. Formalmente (q2,a,λ))
 - Linea 3: write(a) -> q1 | φ=acaa | σ=[a] (el simbolo escaneado de w se agrega al tope de la pila y se realiza transición a q1. Formalmente (q1,a,a))
+- ...
