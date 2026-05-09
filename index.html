@@ -501,31 +501,135 @@ let ndCursor    = -1;
 function parseProgram(text) {
   const result = {};
   const errors = [];
-  const lines  = text.split('\n').map(l => l.trim()).filter(Boolean);
+
+  const lines = text
+    .split('\n')
+    .map(l => l.trim())
+    .filter(Boolean);
 
   for (const line of lines) {
-    const m = line.match(/^(\d+)\]\s*(scan|write|read)\s+([\s\S]+)$/i);
-    if (!m) { errors.push(`Línea no reconocida: "${line}"`); continue; }
 
-    const id   = parseInt(m[1]);
-    const type = m[2].toLowerCase();
-    const rest = m[3];
+    // =========================
+    // 1. Validar estructura base
+    // =========================
+    const base = line.match(/^(\d+)\]\s*(\w+)(.*)$/i);
 
-    if (result[id]) { errors.push(`Estado ${id} definido más de una vez`); continue; }
-
-    const transitions = [];
-    const re = /\(\s*([^,)\s]+)\s*,\s*(\d+)\s*\)/g;
-    let tm;
-    while ((tm = re.exec(rest)) !== null) {
-      transitions.push({ symbol: tm[1].trim(), nextState: parseInt(tm[2]) });
+    if (!base) {
+      errors.push(`Formato inválido: "${line}"`);
+      continue;
     }
 
-    if (!transitions.length) { errors.push(`Estado ${id}: sin transiciones válidas`); continue; }
-    result[id] = { type, transitions };
-  }
-  return { instructions: result, errors };
-}
+    const [, idText, action, rest] = base;
 
+    const id = parseInt(idText);
+
+    // =========================
+    // 2. Validar acción
+    // =========================
+    const validActions = ["scan", "write", "read"];
+
+    if (!validActions.includes(action.toLowerCase())) {
+      errors.push(
+        `Acción inválida "${action}" en línea: "${line}"`
+      );
+      continue;
+    }
+
+    const type = action.toLowerCase();
+
+    // =========================
+    // 3. Estado duplicado
+    // =========================
+    if (result[id]) {
+      errors.push(
+        `Estado ${id} definido más de una vez`
+      );
+      continue;
+    }
+
+    // =========================
+    // 4. Validar parámetros
+    // =========================
+    if (!rest.trim()) {
+      errors.push(
+        `Estado ${id}: faltan transiciones`
+      );
+      continue;
+    }
+
+    const transitions = [];
+
+    // Busca cosas como:
+    // (a,1)
+    // (b,2)
+    const re = /\(\s*([^,)\s]+)\s*,\s*(\d+)\s*\)/g;
+
+    let tm;
+
+    while ((tm = re.exec(rest)) !== null) {
+
+      const symbol = tm[1].trim();
+      const nextState = parseInt(tm[2]);
+
+      // Validar símbolo
+      if (!symbol) {
+        errors.push(
+          `Estado ${id}: símbolo vacío`
+        );
+        continue;
+      }
+
+      // Validar destino
+      if (isNaN(nextState)) {
+        errors.push(
+          `Estado ${id}: destino inválido`
+        );
+        continue;
+      }
+
+      transitions.push({
+        symbol,
+        nextState
+      });
+    }
+
+    // =========================
+    // 5. Validar si hubo matches
+    // =========================
+    if (!transitions.length) {
+      errors.push(
+        `Estado ${id}: transiciones inválidas`
+      );
+      continue;
+    }
+
+    // =========================
+    // 6. Detectar basura sobrante
+    // =========================
+    const cleaned = rest.replace(re, '').trim();
+
+    if (cleaned.length > 0) {
+      errors.push(
+        `Estado ${id}: contenido inválido "${cleaned}"`
+      );
+      continue;
+    }
+
+    // =========================
+    // 7. Guardar
+    // =========================
+    result[id] = {
+      type,
+      transitions
+    };
+  }
+
+  return {
+    instructions: result,
+    errors
+  };
+}
+  
 function parseList(str) {
   if (!str.trim()) return [];
   return str.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n));
