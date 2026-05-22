@@ -1546,7 +1546,7 @@ function renderDetStep(idx) {
     const stk = c.stack.length ? '[' + c.stack.join(',') + ']' : '[λ]';
     const div = document.createElement('div');
     div.className = 'step-entry' + (i === idx ? ' cur' : '');
-    div.innerHTML = `<span class="sa">${a}</span> → <span class="sq">q${c.state}</span> | φ=<span class="si">${rem}</span> | σ=<span class="ss">${stk}</span>`;
+    div.innerHTML = `<span class="sa">${a}</span> → q=<span class="sq">${c.state}</span> | φ=<span class="si">${rem}</span> | σ=<span class="ss">${stk}</span>`;
     div.onclick = () => { detCursor = i; renderDetStep(i); };
     list.appendChild(div);
   });
@@ -1566,19 +1566,20 @@ function renderNdStep() {
   const frontier = ndHistory[ndCursor] || ndFrontier;
   document.getElementById('branchSection').style.display = '';
 
-  // Branches display
+  // Branches display (enumeradas)
   const blist = document.getElementById('branchList');
   blist.innerHTML = '';
-  for (const c of frontier) {
+  frontier.forEach((c, idx) => {
     const rem = c.input.substring(c.inputPos) || 'λ';
     const stk = c.stack.length ? '[' + c.stack.join(',') + ']' : '[λ]';
     const cls = c.accepted ? 'branch-accepted' : c.dead ? 'branch-dead' : 'branch-active';
     const icon = c.accepted ? '✓' : c.dead ? '✗' : '●';
     const div = document.createElement('div');
     div.className = 'branch-entry ' + cls;
-    div.innerHTML = `${icon} <span class="sa">${c.action}</span> <span class="sq">q${c.state}</span> | φ=<span class="si">${rem}</span> | σ=<span class="ss">${stk}</span>`;
+    // Formato: ICON N. acción q<estado> | φ=... | σ=[...]
+    div.innerHTML = `${icon} ${idx + 1}. <span class="sa">${c.action}</span> q=<span class="sq">${c.state}</span> | φ=<span class="si">${rem}</span> | σ=<span class="ss">${stk}</span>`;
     blist.appendChild(div);
-  }
+  });
 
   // Highlight all active states
   highlightStates(frontier.filter(c => !c.dead).map(c => c.state));
