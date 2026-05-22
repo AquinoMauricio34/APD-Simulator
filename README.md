@@ -1,9 +1,10 @@
 # APD-Simulator
 ## Instrucciones de Programa
 - Por cada línea se escribe UNA instrucción para UN estado.
-- El nombre de los estados es un numero si o si.
+- El nombre de los estados puede ser cualquiera. Ej: "1]", "S1]", "W]", etc.
 - Las instrucciones pueden ser scan, write y read.
 - El formato de una instruccion es: <estado>] <tipo_instruccion> (<símbolo>,<estado_sucesor>) (<símbolo>,<estado_sucesor>) ...
+- Si un símbolo enviado esta conformado por más de un caracter, por ejemplo "perro", para que el programa lo tome como símbolo único, debe ir entre comillas dobles en la instrucción. Ej: "q1] write ("perro",q2)" y la Pila quedará: (base_pila) | perro. En el caso contrario, si no se agregan las comillas dobles, "perro" será interpretado como 'p', 'e', 'r', 'r', 'o'. Ej: "q1] write (perro,q2)" y la Pila quedará: (base_pila) | p | e | r | r | o. Esto es importante para tener en cuenta al momento de diseñar un aceptor top-down (ATD).
 - Ejemplo: "1] scan (a,2) (b,3) (c,4)", "2] write (a,1)", "3] write (b,1)", "4] scan (a,5) (b,6)", "5] read (a,4)", "6] read (b,4)".
 
 ## Estado(s) inicial(es)
@@ -22,7 +23,7 @@
 - Construye el diagrama y prepara el programa. Es importante construir el diagrama si o si antes de realizar la ejecución.
 
 ## Modo de Simulación
-- Si el diseño es no determinístico, seleccionar "No Determinístico", dejarlo en "Determinístico" es posible pero no tiene sentido.
+- Si el diseño es no determinístico, seleccionar "No Determinístico". Dejarlo en "Determinístico" es posible pero no tiene sentido y no funcionará correctamente.
 
 ## Cadena de entrada
 - es la cadena w a evaluar para verificar si es aceptada o rechazada.
