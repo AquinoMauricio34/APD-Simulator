@@ -1,4 +1,4 @@
-# APD-Simulator
+# APD-Simulator (tambien ATD)
 ## Instrucciones de Programa
 - Por cada línea se escribe UNA instrucción para UN estado.
 - El nombre de los estados puede ser cualquiera. Ej: "1]", "S1]", "W]", etc.
