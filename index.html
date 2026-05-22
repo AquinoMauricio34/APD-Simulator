@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>APD Simulator — Autómatas Push-Down</title>
+<title>APD Simulator</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.28.1/cytoscape.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Outfit:wght@300;400;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
@@ -324,6 +324,7 @@ button {
 <header>
   <div class="logo">
     <h1>APD <em>Simulator</em></h1>
+    <h4>(también ATD)</h4>
     <sub>SCAN · WRITE · READ</sub>
   </div>
   <div class="header-badges">
@@ -341,10 +342,10 @@ button {
 
       <div>
         <div class="sec">Instrucciones del Programa</div>
-        <label>Formato: N] tipo (símbolo,estado) ...</label>
+        <label>Formato: ID] tipo (símbolo,estado) ...</label>
         <textarea id="instrInput" spellcheck="false"
           placeholder="1] scan (a,2) (b,3) (c,4)&#10;2] write (a,1)&#10;3] write (b,1)&#10;4] scan (a,5) (b,6)&#10;5] read (a,4)&#10;6] read (b,4)"></textarea>
-        <p class="hint">scan · write · read  |  un estado por línea</p>
+        <p class="hint">scan · write · read  |  ID: número, letra o combinación (ej: W1, S2, q1, etc.)  |  un estado por línea</p>
       </div>
 
       <div class="two-col">
@@ -560,8 +561,6 @@ let ndCursor    = -1;
       skipSpaces();
 
       while (i < rest.length) {
-        const start = i;
-
         if (rest[i] !== "(") {
           return {
             ok: false,
@@ -570,7 +569,7 @@ let ndCursor    = -1;
               baseColumn + i,
               line,
               "Se esperaba '(' para iniciar una transición.",
-              "Ejemplo válido: (a,1)"
+              "Ejemplo válido: (a,1) o (\"abc\",1)"
             )
           };
         }
@@ -579,8 +578,34 @@ let ndCursor    = -1;
         skipSpaces();
 
         const symbolStart = i;
-        while (i < rest.length && !/[\s,)]/.test(rest[i])) i++;
-        const symbol = rest.slice(symbolStart, i).trim();
+        let symbol;
+        let isQuoted = false;
+
+        // Detectar si el símbolo está entre comillas dobles
+        if (rest[i] === '"') {
+          isQuoted = true;
+          i++; // saltar comilla de apertura
+          const quotedStart = i;
+          while (i < rest.length && rest[i] !== '"') i++;
+          if (i >= rest.length) {
+            return {
+              ok: false,
+              error: formatError(
+                lineNumber,
+                baseColumn + quotedStart,
+                line,
+                "Se esperaba comilla doble de cierre.",
+                "Ejemplo válido: (\"abc\",1)"
+              )
+            };
+          }
+          symbol = rest.slice(quotedStart, i);
+          i++; // saltar comilla de cierre
+        } else {
+          // Símbolo sin comillas
+          while (i < rest.length && !/[\s,)]/.test(rest[i])) i++;
+          symbol = rest.slice(symbolStart, i).trim();
+        }
 
         if (!symbol) {
           return {
@@ -590,7 +615,7 @@ let ndCursor    = -1;
               baseColumn + symbolStart,
               line,
               "Se esperaba un símbolo.",
-              "Ejemplo válido: (a,1)"
+              "Ejemplo válido: (a,1) o (\"abc\",1)"
             )
           };
         }
@@ -605,7 +630,7 @@ let ndCursor    = -1;
               baseColumn + i,
               line,
               "Se esperaba ','.",
-              "Ejemplo válido: (a,1)"
+              "Ejemplo válido: (a,1) o (\"abc\",1)"
             )
           };
         }
@@ -613,23 +638,23 @@ let ndCursor    = -1;
         i++;
         skipSpaces();
 
-        const numStart = i;
-        while (i < rest.length && /\d/.test(rest[i])) i++;
+        const stateStart = i;
+        while (i < rest.length && /[a-zA-Z0-9_]/.test(rest[i])) i++;
 
-        if (numStart === i) {
+        if (stateStart === i) {
           return {
             ok: false,
             error: formatError(
               lineNumber,
               baseColumn + i,
               line,
-              "Se esperaba un número de estado.",
-              "Ejemplo válido: (a,1)"
+              "Se esperaba un identificador de estado.",
+              "Ejemplo válido: (a,1) o (\"abc\",S2) o (x,W1s)"
             )
           };
         }
 
-        const nextState = parseInt(rest.slice(numStart, i), 10);
+        const nextState = rest.slice(stateStart, i); // Mantener como string
 
         skipSpaces();
 
@@ -641,14 +666,15 @@ let ndCursor    = -1;
               baseColumn + i,
               line,
               "Se esperaba ')'.",
-              "Ejemplo válido: (a,1)"
+              "Ejemplo válido: (a,1) o (\"abc\",1)"
             )
           };
         }
 
         i++;
 
-        transitions.push({ symbol, nextState });
+        // Guardar la transición con información de si es literal (entrecomillado)
+        transitions.push({ symbol, nextState, isLiteral: isQuoted });
 
         skipSpaces();
 
@@ -674,7 +700,7 @@ let ndCursor    = -1;
             baseColumn,
             line,
             "No se encontraron transiciones válidas.",
-            "Ejemplo válido: 12] read(a,1)(b,2)"
+            "Ejemplo válido: 12] read(a,1)(b,2) o write(\"abc\",1)"
           )
         };
       }
@@ -783,7 +809,7 @@ let ndCursor    = -1;
               baseColumn + i,
               line,
               `Se esperaba "("`,
-              `Ejemplo válido: (a,1)`
+              `Ejemplo válido: (a,1) o ("abc",1)`
             )
           };
         }
@@ -793,17 +819,41 @@ let ndCursor    = -1;
         skipSpaces();
 
         const symbolStart = i;
+        let symbol;
+        let isQuoted = false;
 
-        while (
-          i < rest.length &&
-          !/[\s,)]/.test(rest[i])
-        ) {
-          i++;
+        // Detectar si el símbolo está entre comillas dobles
+        if (rest[i] === '"') {
+          isQuoted = true;
+          i++; // saltar comilla de apertura
+          const quotedStart = i;
+          while (i < rest.length && rest[i] !== '"') i++;
+          if (i >= rest.length) {
+            return {
+              ok: false,
+              error: formatError(
+                lineNumber,
+                baseColumn + quotedStart,
+                line,
+                `Se esperaba comilla doble de cierre`,
+                `Ejemplo válido: ("abc",1)`
+              )
+            };
+          }
+          symbol = rest.slice(quotedStart, i);
+          i++; // saltar comilla de cierre
+        } else {
+          // Símbolo sin comillas
+          while (
+            i < rest.length &&
+            !/[\s,)]/.test(rest[i])
+          ) {
+            i++;
+          }
+          symbol = rest
+            .slice(symbolStart, i)
+            .trim();
         }
-
-        const symbol = rest
-          .slice(symbolStart, i)
-          .trim();
 
         if (!symbol) {
 
@@ -814,7 +864,7 @@ let ndCursor    = -1;
               baseColumn + symbolStart,
               line,
               `Se esperaba un símbolo`,
-              `Ejemplo válido: (a,1)`
+              `Ejemplo válido: (a,1) o ("abc",1)`
             )
           };
         }
@@ -830,7 +880,7 @@ let ndCursor    = -1;
               baseColumn + i,
               line,
               `Se esperaba ","`,
-              `Ejemplo válido: (a,1)`
+              `Ejemplo válido: (a,1) o ("abc",1)`
             )
           };
         }
@@ -839,16 +889,16 @@ let ndCursor    = -1;
 
         skipSpaces();
 
-        const numberStart = i;
+        const stateStart = i;
 
         while (
           i < rest.length &&
-          /\d/.test(rest[i])
+          /[a-zA-Z0-9_]/.test(rest[i])
         ) {
           i++;
         }
 
-        if (numberStart === i) {
+        if (stateStart === i) {
 
           return {
             ok: false,
@@ -856,15 +906,13 @@ let ndCursor    = -1;
               lineNumber,
               baseColumn + i,
               line,
-              `Se esperaba un número de estado`,
-              `Ejemplo válido: (a,1)`
+              `Se esperaba un identificador de estado`,
+              `Ejemplo válido: (a,1) o ("abc",S2) o (x,W1s)`
             )
           };
         }
 
-        const nextState = parseInt(
-          rest.slice(numberStart, i)
-        );
+        const nextState = rest.slice(stateStart, i); // Mantener como string
 
         skipSpaces();
 
@@ -877,17 +925,15 @@ let ndCursor    = -1;
               baseColumn + i,
               line,
               `Se esperaba ")"`,
-              `Ejemplo válido: (a,1)`
+              `Ejemplo válido: (a,1) o ("abc",1)`
             )
           };
         }
 
         i++;
 
-        transitions.push({
-          symbol,
-          nextState
-        });
+        // Guardar la transición con información de si es literal (entrecomillado)
+        transitions.push({ symbol, nextState, isLiteral: isQuoted });
 
         skipSpaces();
 
@@ -918,7 +964,7 @@ let ndCursor    = -1;
             baseColumn,
             line,
             `No se encontraron transiciones válidas`,
-            `Ejemplo válido: 1] read(a,1)(b,2)`
+            `Ejemplo válido: 1] read(a,1)(b,2) o write("abc",1)`
           )
         };
       }
@@ -957,7 +1003,7 @@ let ndCursor    = -1;
         }
 
         const base = line.match(
-          /^(\s*)(\d+)\]\s*(\w+)(.*)$/i
+          /^(\s*)([a-zA-Z0-9_]+)\]\s*(\w+)(.*)$/i
         );
 
         if (!base) {
@@ -968,7 +1014,7 @@ let ndCursor    = -1;
               1,
               line,
               `Formato inválido`,
-              `Ejemplo esperado: 1] read(a,1)(b,2)`
+              `Ejemplo esperado: W1] read(a,S1)(b,S2) o 1] read(a,1)(b,2)`
             )
           );
 
@@ -983,7 +1029,7 @@ let ndCursor    = -1;
           rest
         ] = base;
 
-        const id = parseInt(idText);
+        const id = idText; // Mantener como string
 
         const actionColumn =
           leadingSpaces.length +
@@ -1076,7 +1122,7 @@ let ndCursor    = -1;
   
 function parseList(str) {
   if (!str.trim()) return [];
-  return str.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n));
+  return str.split(',').map(s => s.trim()).filter(s => s.length > 0);
 }
 
 // ─────────────────────────────────────────────
@@ -1094,7 +1140,7 @@ function validateAPD(instr, initials, finals) {
     for (const tr of inst.transitions) {
       const next = instr[tr.nextState];
       if (next && next.type === 'read') {
-        msgs.push({ t:'err', m:`APD Impropio: write(${id}) → read(${tr.nextState}) de forma inmediata — sin efecto neto.` });
+        msgs.push({ t:'warn', m:`APD Impropio: write(${id}) → read(${tr.nextState}) de forma inmediata — sin efecto neto.` });
       }
     }
   }
@@ -1117,7 +1163,7 @@ function validateAPD(instr, initials, finals) {
   }
 
   // Write cycle detection (write-only reachability from each write state)
-  const writeIds = Object.entries(instr).filter(([,v]) => v.type === 'write').map(([k]) => parseInt(k));
+  const writeIds = Object.entries(instr).filter(([,v]) => v.type === 'write').map(([k]) => k);
   const reported = new Set();
   for (const start of writeIds) {
     // DFS through write-only states
@@ -1155,7 +1201,7 @@ function validateAPD(instr, initials, finals) {
 function buildElements(instr, initials, finals) {
   const allStates = new Set();
   for (const [id, inst] of Object.entries(instr)) {
-    allStates.add(parseInt(id));
+    allStates.add(id); // id es ahora un string
     inst.transitions.forEach(t => allStates.add(t.nextState));
   }
   initials.forEach(s => allStates.add(s));
@@ -1190,7 +1236,7 @@ function buildElements(instr, initials, finals) {
 
   let ei = 0;
   for (const [key, e] of Object.entries(edgeMap)) {
-    const isSelf = parseInt(e.src) === e.tgt;
+    const isSelf = e.src === e.tgt; // Comparar strings directamente
     els.push({
       data: { id: `e${ei++}`, source: `n${e.src}`, target: `n${e.tgt}`, label: e.syms.join(', ') },
       classes: isSelf ? 'self-loop' : ''
@@ -1309,15 +1355,41 @@ function getNextConfigs(config) {
   const results = [];
   for (const tr of inst.transitions) {
     if (inst.type === 'scan') {
-      if (inputPos < input.length && input[inputPos] === tr.symbol) {
-        results.push({ state: tr.nextState, inputPos: inputPos + 1, input, stack: [...stack], action: `scan(${tr.symbol})` });
+      // Para scan sin comillas, leer carácter por carácter
+      // Para scan con comillas, leer el símbolo completo
+      if (tr.isLiteral) {
+        // Leer el símbolo entrecomillado como unidad
+        const symbolLen = tr.symbol.length;
+        if (inputPos + symbolLen <= input.length && input.substring(inputPos, inputPos + symbolLen) === tr.symbol) {
+          results.push({ state: tr.nextState, inputPos: inputPos + symbolLen, input, stack: [...stack], action: `scan("${tr.symbol}")` });
+        }
+      } else {
+        // Leer carácter por carácter del símbolo
+        for (const char of tr.symbol) {
+          if (inputPos < input.length && input[inputPos] === char) {
+            results.push({ state: tr.nextState, inputPos: inputPos + 1, input, stack: [...stack], action: `scan(${char})` });
+          }
+        }
       }
     } else if (inst.type === 'write') {
-      results.push({ state: tr.nextState, inputPos, input, stack: [...stack, tr.symbol], action: `write(${tr.symbol})` });
+      let newStack;
+      let actionStr;
+      if (tr.isLiteral) {
+        // Añadir como símbolo único entrecomillado
+        newStack = [...stack, tr.symbol];
+        actionStr = `write("${tr.symbol}")`;
+      } else {
+        // Dividir en caracteres individuales
+        const chars = tr.symbol.split('');
+        newStack = [...stack, ...chars];
+        actionStr = `write(${tr.symbol})`;
+      }
+      results.push({ state: tr.nextState, inputPos, input, stack: newStack, action: actionStr });
     } else if (inst.type === 'read') {
       const top = stack[stack.length - 1];
       if (stack.length > 0 && top === tr.symbol) {
-        results.push({ state: tr.nextState, inputPos, input, stack: stack.slice(0, -1), action: `read(${tr.symbol})` });
+        const actionStr = tr.isLiteral ? `read("${tr.symbol}")` : `read(${tr.symbol})`;
+        results.push({ state: tr.nextState, inputPos, input, stack: stack.slice(0, -1), action: actionStr });
       }
     }
   }
