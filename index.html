@@ -2307,15 +2307,14 @@
 
     function loadExample() {
       document.getElementById('instrInput').value =
-        `qI] write("Sigma",qR)
-qR] read(A,qA)(B,qB)(a,qa)(b,qb)("Sigma",qS)
-qS] write(AAa,qR)
-qA] write(Bb,qR)(Ba,qR)(a,qR)
-qB] write(AAa,qR)
-qa] scan(a,qR)
-qb] scan (b,qR)`;
-      document.getElementById('initialInput').value = 'qI';
-      document.getElementById('finalInput').value = 'qR';
+        `1] scan (a,2) (b,3) (c,4)
+2] write (A,1)
+3] write (B,1)
+4] scan (a,5) (b,6)
+5] read (A,4)
+6] read (B,4)`;
+      document.getElementById('initialInput').value = '1';
+      document.getElementById('finalInput').value = '2';
       buildAll();
     }
 
